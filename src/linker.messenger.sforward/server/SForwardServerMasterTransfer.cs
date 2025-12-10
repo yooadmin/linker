@@ -1,8 +1,8 @@
 ﻿using linker.libs;
+using linker.libs.extends;
+using linker.messenger.node;
 using linker.messenger.sforward.messenger;
 using linker.messenger.signin;
-using System.Collections.Concurrent;
-using System.Net;
 
 namespace linker.messenger.sforward.server
 {
@@ -11,96 +11,35 @@ namespace linker.messenger.sforward.server
     /// </summary>
     public class SForwardServerMasterTransfer
     {
-        private readonly ConcurrentDictionary<string, SForwardServerNodeReportInfo> reports = new ConcurrentDictionary<string, SForwardServerNodeReportInfo>();
-
         private readonly ISerializer serializer;
         private readonly IMessengerSender messengerSender;
         private readonly ISForwardServerWhiteListStore sForwardServerWhiteListStore;
-        private readonly ISForwardServerNodeStore sForwardServerNodeStore;
+        private readonly SForwardServerConnectionTransfer sForwardServerConnectionTransfer;
+        private readonly SForwardServerNodeReportTransfer sForwardServerNodeReportTransfer;
+
 
         public SForwardServerMasterTransfer(ISerializer serializer, IMessengerSender messengerSender, ISForwardServerWhiteListStore sForwardServerWhiteListStore,
-            ISForwardServerNodeStore sForwardServerNodeStore)
+            SForwardServerConnectionTransfer sForwardServerConnectionTransfer, SForwardServerNodeReportTransfer sForwardServerNodeReportTransfer)
         {
             this.serializer = serializer;
             this.messengerSender = messengerSender;
             this.sForwardServerWhiteListStore = sForwardServerWhiteListStore;
-            this.sForwardServerNodeStore = sForwardServerNodeStore;
-
+            this.sForwardServerConnectionTransfer = sForwardServerConnectionTransfer;
+            this.sForwardServerNodeReportTransfer = sForwardServerNodeReportTransfer;
         }
 
-        public void SetNodeReport(IConnection connection, SForwardServerNodeReportInfo info)
-        {
-            try
-            {
-                if (info.Address.Equals(IPAddress.Any))
-                {
-                    info.Address = connection.Address.Address;
-                }
-                if (info.Address.Equals(IPAddress.Loopback))
-                {
-                    info.Address = IPAddress.Any;
-                }
-
-                info.LastTicks = Environment.TickCount64;
-                info.Connection = connection;
-                reports.AddOrUpdate(info.Id, info, (a, b) => info);
-            }
-            catch (Exception ex)
-            {
-                if (LoggerHelper.Instance.LoggerLevel <= LoggerTypes.DEBUG)
-                {
-                    LoggerHelper.Instance.Error(ex);
-                }
-            }
-        }
-        public async Task Edit(SForwardServerNodeUpdateInfo info)
-        {
-
-            if (reports.TryGetValue(info.Id, out SForwardServerNodeReportInfo cache))
-            {
-                await messengerSender.SendOnly(new MessageRequestWrap
-                {
-                    Connection = cache.Connection,
-                    MessengerId = (ushort)SForwardMessengerIds.Edit,
-                    Payload = serializer.Serialize(info)
-                }).ConfigureAwait(false);
-            }
-        }
-        public async Task Exit(string id)
-        {
-            if (reports.TryGetValue(id, out SForwardServerNodeReportInfo cache))
-            {
-                await messengerSender.SendOnly(new MessageRequestWrap
-                {
-                    Connection = cache.Connection,
-                    MessengerId = (ushort)SForwardMessengerIds.Exit,
-                }).ConfigureAwait(false);
-            }
-        }
-        public async Task Update(string id, string version)
-        {
-            if (reports.TryGetValue(id, out SForwardServerNodeReportInfo cache))
-            {
-                await messengerSender.SendOnly(new MessageRequestWrap
-                {
-                    Connection = cache.Connection,
-                    MessengerId = (ushort)SForwardMessengerIds.Update,
-                    Payload = serializer.Serialize(version)
-                }).ConfigureAwait(false);
-            }
-        }
-
-        public async Task<SForwardAddResultInfo> Add(SForwardAddInfo info, SignCacheInfo from)
+        public async Task<SForwardAddResultInfo> Start(SForwardAddInfo info, SignCacheInfo from)
         {
             if (string.IsNullOrWhiteSpace(info.NodeId))
             {
-                var nodes = await GetNodes(from.Super, from.UserId, from.MachineId);
+                var nodes = await sForwardServerNodeReportTransfer.GetNodes(from.Super, from.UserId, from.MachineId);
                 if (nodes.Count > 0)
                 {
-                    info.NodeId = nodes[0].Id;
+                    info.NodeId = nodes[0].NodeId;
                 }
             }
-            if (GetNode(info.NodeId, out var node) == false)
+            var node = await sForwardServerNodeReportTransfer.GetNode(info.NodeId).ConfigureAwait(false);
+            if (node == null)
             {
                 return new SForwardAddResultInfo
                 {
@@ -110,7 +49,7 @@ namespace linker.messenger.sforward.server
                 };
             }
 
-            List<SForwardWhiteListItem> sforward = await sForwardServerWhiteListStore.GetNodes(from.UserId, from.MachineId);
+            List<NodeWhiteListInfo> sforward = await sForwardServerWhiteListStore.GetNodes(from.UserId, from.MachineId);
             string target = string.IsNullOrWhiteSpace(info.Domain) ? info.RemotePort.ToString() : info.Domain;
             info.Super = from.Super;
 
@@ -127,15 +66,16 @@ namespace linker.messenger.sforward.server
 
             info.Bandwidth = bandwidth.Count > 0
                 ? bandwidth.Any(c => c.Bandwidth == 0) ? 0 : bandwidth.Max(c => c.Bandwidth)
-                : info.Super ? 0 : node.MaxBandwidth;
+                : info.Super ? 0 : node.Bandwidth;
 
 
-            if (reports.TryGetValue(info.NodeId, out SForwardServerNodeReportInfo cache))
+            if (sForwardServerConnectionTransfer.TryGet(ConnectionSideType.Node, info.NodeId, out var connection))
             {
+                info.NodeId = sForwardServerNodeReportTransfer.Config.NodeId;
                 MessageResponeInfo resp = await messengerSender.SendReply(new MessageRequestWrap
                 {
-                    Connection = cache.Connection,
-                    MessengerId = (ushort)SForwardMessengerIds.Add191,
+                    Connection = connection,
+                    MessengerId = (ushort)SForwardMessengerIds.Start,
                     Payload = serializer.Serialize(info)
                 }).ConfigureAwait(false);
                 if (resp.Code == MessageResponeCodes.OK)
@@ -146,20 +86,19 @@ namespace linker.messenger.sforward.server
             return new SForwardAddResultInfo
             {
                 BufferSize = 1,
-                Message = "node not found",
+                Message = "node connection not found",
                 Success = false
             };
         }
-        public async Task<SForwardAddResultInfo> Remove(SForwardAddInfo info)
+        public async Task<SForwardAddResultInfo> Stop(SForwardAddInfo info)
         {
-            if (string.IsNullOrWhiteSpace(info.NodeId)) info.NodeId = sForwardServerNodeStore.Node.Id;
-
-            if (reports.TryGetValue(info.NodeId, out SForwardServerNodeReportInfo cache))
+            if (sForwardServerConnectionTransfer.TryGet(ConnectionSideType.Node, info.NodeId, out var connection))
             {
+                info.NodeId = sForwardServerNodeReportTransfer.Config.NodeId;
                 MessageResponeInfo resp = await messengerSender.SendReply(new MessageRequestWrap
                 {
-                    Connection = cache.Connection,
-                    MessengerId = (ushort)SForwardMessengerIds.Remove191,
+                    Connection = connection,
+                    MessengerId = (ushort)SForwardMessengerIds.Stop,
                     Payload = serializer.Serialize(info)
                 }).ConfigureAwait(false);
                 if (resp.Code == MessageResponeCodes.OK)
@@ -170,39 +109,12 @@ namespace linker.messenger.sforward.server
             return new SForwardAddResultInfo
             {
                 BufferSize = 1,
-                Message = "node not found",
+                Message = "node connection not found",
                 Success = false
             };
         }
 
 
-        /// <summary>
-        /// 获取节点列表
-        /// </summary>
-        /// <param name="super">是否已认证</param>
-        /// <returns></returns>
-        public async Task<List<SForwardServerNodeReportInfo>> GetNodes(bool super, string userid, string machineId)
-        {
-            List<string> sforward = (await sForwardServerWhiteListStore.GetNodes(userid, machineId)).Where(c => c.Bandwidth >= 0).SelectMany(c => c.Nodes).ToList();
-
-            var result = reports.Values
-                .Where(c => Environment.TickCount64 - c.LastTicks < 15000)
-                .Where(c =>
-                {
-                    return super || c.Public || sforward.Contains(c.Id) || sforward.Contains("*");
-                })
-                .OrderByDescending(c => c.LastTicks);
-
-            return result.ThenBy(x => x.BandwidthRatio)
-                     .ThenByDescending(x => x.MaxBandwidth == 0 ? double.MaxValue : x.MaxBandwidth)
-                     .ThenByDescending(x => x.MaxBandwidthTotal == 0 ? double.MaxValue : x.MaxBandwidthTotal)
-                     .ThenByDescending(x => x.MaxGbTotal == 0 ? double.MaxValue : x.MaxGbTotal)
-                     .ThenByDescending(x => x.MaxGbTotalLastBytes == 0 ? long.MaxValue : x.MaxGbTotalLastBytes).ToList();
-        }
-        public bool GetNode(string id, out SForwardServerNodeReportInfo node)
-        {
-            return reports.TryGetValue(id, out node) && node != null && Environment.TickCount64 - node.LastTicks < 15000;
-        }
 
     }
 }

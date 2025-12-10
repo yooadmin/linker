@@ -18,7 +18,7 @@ import { computed, onMounted, onUnmounted,  provide,  reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n';
 import WhiteList from '../wlist/Index.vue';
 import Nodes from './Nodes.vue';
-import { setSForwardSubscribe } from '@/apis/sforward';
+import { sforwardSubscribe } from '@/apis/sforward';
 import Status from '../wlist/Status.vue';
 
 export default {
@@ -37,18 +37,22 @@ export default {
 
         const nodes = ref([]);
         provide('nodes',nodes);
-        const _setSForwardSubscribe = ()=>{
+        const _sforwardSubscribe = ()=>{
             clearTimeout(state.timer);
-            setSForwardSubscribe().then((res)=>{
+            sforwardSubscribe().then((res)=>{
+                res.forEach((item)=>{
+                    item._online = item.LastTicks < 15000;
+                    item._manager = item.Manageable && item._online;
+                });
                 state.nodes = res;
                 nodes.value = res;
-                state.timer = setTimeout(_setSForwardSubscribe,1000);
+                state.timer = setTimeout(_sforwardSubscribe,1000);
             }).catch(()=>{
-                state.timer = setTimeout(_setSForwardSubscribe,1000);
+                state.timer = setTimeout(_sforwardSubscribe,1000);
             });
         }
         onMounted(()=>{
-            _setSForwardSubscribe();
+            _sforwardSubscribe();
         });
         onUnmounted(()=>{
             clearTimeout(state.timer);

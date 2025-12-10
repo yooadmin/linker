@@ -3,7 +3,7 @@
         <template #default="{values}">
             <el-table-column :label="$t('home.oper')"  fixed="right" min-width="110">
                 <template #default="scope">
-                    <div>
+                    <div v-if="scope.row">
                         <div class="numbers">
                             <el-row>
                                 <template v-if="scope.row.Connected">
@@ -12,7 +12,7 @@
                                     <TransportOper :item="scope.row"></TransportOper>
                                 </template>
                                 <el-col :span="12">
-                                     <el-dropdown size="small" >
+                                     <el-dropdown size="small" v-if="scope.row.MachineId">
                                         <div class="dropdown">
                                             <span>...</span>
                                             <el-icon class="el-icon--right">
@@ -45,6 +45,7 @@
                             </el-row>
                         </div>
                     </div>
+                    <div class="device-remark"></div>
                 </template>
             </el-table-column>
         </template>

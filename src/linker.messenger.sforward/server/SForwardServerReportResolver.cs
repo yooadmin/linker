@@ -13,12 +13,10 @@ namespace linker.messenger.sforward.server
     {
         public byte Type => (byte)ResolverType.SForwardReport;
 
-        private readonly ISForwardServerMasterStore sForwardServerMasterStore;
         private readonly IMessengerResolver messengerResolver;
 
-        public SForwardServerReportResolver(ISForwardServerMasterStore sForwardServerMasterStore, IMessengerResolver messengerResolver)
+        public SForwardServerReportResolver(IMessengerResolver messengerResolver)
         {
-            this.sForwardServerMasterStore = sForwardServerMasterStore;
             this.messengerResolver = messengerResolver;
         }
 
@@ -40,14 +38,7 @@ namespace linker.messenger.sforward.server
 
                 string key = buffer.AsMemory(0, length).GetString();
 
-                if (sForwardServerMasterStore.Master.SecretKey.Sha256() == key)
-                {
-                    await messengerResolver.BeginReceiveServer(socket, Helper.EmptyArray).ConfigureAwait(false);
-                }
-                else
-                {
-                    socket.SafeClose();
-                }
+                await messengerResolver.BeginReceiveServer(socket, Helper.EmptyArray).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

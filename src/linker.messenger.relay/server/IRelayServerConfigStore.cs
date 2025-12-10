@@ -1,45 +1,11 @@
-﻿using System.Net;
-using linker.libs.extends;
-using System.Text.Json.Serialization;
+﻿using linker.libs.extends;
+using linker.messenger.node;
 using linker.tunnel.connection;
+using System.Net;
+using System.Text.Json.Serialization;
 
 namespace linker.messenger.relay.server
 {
-    public interface IRelayServerConfigStore
-    {
-        public int ServicePort { get; }
-
-        /// <summary>
-        /// 节点信息
-        /// </summary>
-        public RelayServerConfigInfo Config { get; }
-
-        /// <summary>
-        /// 设置
-        /// </summary>
-        /// <param name="config"></param>
-        public void SetInfo(RelayServerConfigInfo config);
-
-        /// <summary>
-        /// 设置月份
-        /// </summary>
-        /// <param name="month"></param>
-        public void SetDataMonth(int month);
-        /// <summary>
-        /// 设置剩余流量
-        /// </summary>
-        /// <param name="value"></param>
-        public void SetDataRemain(long value);
-
-        public void SetShareKey(string shareKey);
-        public void SetMasterKey(string masterKey);
-
-        /// <summary>
-        /// 提交保存
-        /// </summary>
-        public void Confirm();
-    }
-
     public class RelayServerNodeInfo
     {
         private string nodeId = Guid.NewGuid().ToString().ToUpper();
@@ -47,6 +13,8 @@ namespace linker.messenger.relay.server
 
         private string name = "default";
         public string Name { get => name; set { name = value.SubStr(0, 32); } }
+
+        public string Host { get; set; } = string.Empty;
 
         public TunnelProtocolType Protocol { get; set; } = TunnelProtocolType.Tcp;
         public int Connections { get; set; }
@@ -58,32 +26,31 @@ namespace linker.messenger.relay.server
         public string Logo { get; set; } = "https://linker.snltty.com/img/logo.png";
     }
 
-    public sealed class RelayServerConfigInfo : RelayServerNodeInfo
+    public sealed class RelayServerConfigInfo : RelayServerNodeInfo, INodeConfigBase
     {
+        [SaveJsonIgnore]
+        public DistributedInfoOld Distributed { get; set; } = new DistributedInfoOld { };
+
         public string ShareKey { get; set; } = string.Empty;
         public string MasterKey { get; set; } = string.Empty;
         public int DataMonth { get; set; }
-        public string Domain { get; set; } = string.Empty;
+
 
     }
 
-    public class RelayServerNodeReportInfo : RelayServerNodeInfo
+    public class RelayServerNodeReportInfo : RelayServerNodeInfo,INodeReportBase
     {
         public string MasterKey { get; set; } = string.Empty;
         public string Version { get; set; } = string.Empty;
         public int ConnectionsRatio { get; set; }
         public double BandwidthRatio { get; set; }
 
-        public IPEndPoint[] Masters { get; set; } = Array.Empty<IPEndPoint>();
-
-        public string Domain { get; set; } = string.Empty;
+        public int MasterCount { get; set; }
     }
 
-    public sealed class RelayServerNodeStoreInfo : RelayServerNodeReportInfo
+    public sealed class RelayServerNodeStoreInfo : RelayServerNodeReportInfo,INodeStoreBase
     {
         public int Id { get; set; }
-
-        public string Host { get; set; } = string.Empty;
 
         public int BandwidthEach { get; set; } = 50;
         public bool Public { get; set; }
@@ -96,16 +63,26 @@ namespace linker.messenger.relay.server
         public string ShareKey { get; set; } = string.Empty;
     }
 
-
-    public class RelayServerNodeShareInfo
+    public sealed class DistributedInfoOld
     {
-        public string NodeId { get; set; } = string.Empty;
+        public RelayServerNodeInfoOld Node { get; set; } = new RelayServerNodeInfoOld { };
+    }
+    public sealed class RelayServerNodeInfoOld
+    {
+        public string Id { get; set; }
+
+        public string Name { get; set; }
         public string Host { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string SystemId { get; set; } = string.Empty;
+
+        public int MaxConnection { get; set; }
+        public double MaxBandwidthTotal { get; set; }
+        public double MaxGbTotal { get; set; }
+        public long MaxGbTotalLastBytes { get; set; }
+        public int MaxGbTotalMonth { get; set; }
+
+        public string Url { get; set; } = "https://linker-doc.snltty.com";
 
     }
-
     public partial class RelayServerNodeReportInfoOld
     {
         public string Id { get; set; } = string.Empty;

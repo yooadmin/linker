@@ -7,6 +7,7 @@ export const provideDevices = () => {
     //https://api.ipbase.com/v1/json/8.8.8.8
     const globalData = injectGlobalData();
     const machineId = computed(() => globalData.value.config.Client.Id);
+    const hasFullList = computed(() => globalData.value.hasAccess('FullList'));
 
     const ps = +(localStorage.getItem('ps') || '10');
     const count = +(localStorage.getItem('device-count') || '10');
@@ -43,7 +44,7 @@ export const provideDevices = () => {
 
         const dataFn = (hook)=>{
             return new Promise((resolve, reject) => { 
-                hook.dataFn(devices.page.List).then(changed=>{
+                hook.dataFn(devices.page.List.filter(c=>c)).then(changed=>{
                     hook.changed = hook.changed ||changed;
                     resolve();
                 });
@@ -58,16 +59,19 @@ export const provideDevices = () => {
                 hook.refreshFn(devices.page.List);
             });
 
-            const chaneds = Object.values(hooks).filter(c=>c.changed);
-            chaneds.forEach(hook=>{ hook.changed=false });
-            if(chaneds.length > 0){
+            const changeds = Object.values(hooks).filter(c=>c.changed);
+            changeds.forEach(hook=>{ hook.changed=false });
+            if(changeds.length > 0){
                 for (let i = 0; i< devices.page.List.length; i++) {
-                    const json = {_index:i};
-                    for(let j = 0; j < chaneds.length; j++) {
-                        const hook = chaneds[j];
-                        hook.processFn(devices.page.List[i],json);
+                    const device = devices.page.List[i];
+                    if(device){
+                        const json = {_index:i};
+                        for(let j = 0; j < changeds.length; j++) {
+                            const hook = changeds[j];
+                            hook.processFn(devices.page.List[i],json);
+                        }
+                        Object.assign(devices.page.List[i], json);
                     }
-                    Object.assign(devices.page.List[i], json);
                 }
             }
             await Promise.all(Object.values(hooks).map(hook=>dataFn(hook)));
@@ -89,6 +93,7 @@ export const provideDevices = () => {
                 devices.page.Request = res.Request;
                 devices.page.Count = res.Count;
                 for (let j in res.List) {
+                    
                     Object.assign(res.List[j], {
                         showDel: machineId.value != res.List[j].MachineId && res.List[j].Connected == false,
                         showAccess: machineId.value != res.List[j].MachineId && res.List[j].Connected,
@@ -98,6 +103,13 @@ export const provideDevices = () => {
                     });
                     if (res.List[j].isSelf) {
                         globalData.value.self = res.List[j];
+                    }
+                    if(!hasFullList.value)
+                    {
+                        Object.assign(res.List[j], {
+                            MachineId:machineId.value == res.List[j].MachineId?res.List[j].MachineId:'',
+                            isHide:machineId.value != res.List[j].MachineId
+                        });
                     }
                 }
                 devices.page.List = res.List;

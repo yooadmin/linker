@@ -14,9 +14,9 @@
 		<PackageProjectUrl>https://github.com/snltty/linker</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/snltty/linker</RepositoryUrl>
 		<PackageReleaseNotes>linker messenger relay</PackageReleaseNotes>
-		<Version>1.9.6</Version>
-		<AssemblyVersion>1.9.6</AssemblyVersion>
-		<FileVersion>1.9.6</FileVersion>
+		<Version>1.9.7</Version>
+		<AssemblyVersion>1.9.7</AssemblyVersion>
+		<FileVersion>1.9.7</FileVersion>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -38,6 +38,7 @@
 	  <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.0" />
 	</ItemGroup>
 	<ItemGroup>
+		<ProjectReference Include="..\..\linker.messenger.node\linker.messenger.node.csproj" />
 		<ProjectReference Include="..\linker.libs\linker.libs.csproj" />
 		<ProjectReference Include="..\linker.messenger.signin\linker.messenger.signin.csproj" />
 		<ProjectReference Include="..\linker.messenger.sync\linker.messenger.sync.csproj" />

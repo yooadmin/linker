@@ -1,18 +1,17 @@
 ﻿using linker.libs;
 using linker.libs.extends;
-using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 
-namespace linker.messenger.relay.server
+namespace linker.messenger.node
 {
-    public class RelayServerConnectionResolver : IResolver
+    public class NodeConnectionResolver : IResolver
     {
-        public byte Type => (byte)ResolverType.RelayConnection;
+        public virtual byte Type => (byte)ResolverType.NodeConnection;
 
         private readonly IMessengerResolver messengerResolver;
 
-        public RelayServerConnectionResolver(IMessengerResolver messengerResolver)
+        public NodeConnectionResolver(IMessengerResolver messengerResolver)
         {
             this.messengerResolver = messengerResolver;
         }
